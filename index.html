@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Alerte intrusion</title>
+  <style>
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: radial-gradient(circle at center, #3a0000 0%, #140000 60%, #000 100%);
+      font-family: "Courier New", monospace;
+      color: #fff;
+      text-align: center;
+      padding: 20px;
+    }
+
+    .card {
+      width: 100%;
+      max-width: 760px;
+      background: rgba(20, 0, 0, 0.92);
+      border: 3px solid #ff2e2e;
+      border-radius: 18px;
+      padding: 32px 24px;
+      box-shadow: 0 0 35px rgba(255, 0, 0, 0.35);
+      animation: pulseBorder 1s infinite;
+      position: relative;
+      overflow: hidden;
+    }
+
+    h1 {
+      margin: 0 0 20px;
+      font-size: 34px;
+      color: #ff4d4d;
+      letter-spacing: 3px;
+      animation: flashText 0.8s infinite;
+    }
+
+    .warning {
+      font-size: 20px;
+      line-height: 1.7;
+      margin-bottom: 24px;
+    }
+
+    .timer {
+      font-size: 72px;
+      font-weight: bold;
+      color: #fff;
+      margin: 18px 0 10px;
+      text-shadow: 0 0 18px rgba(255, 60, 60, 0.8);
+    }
+
+    .sub {
+      font-size: 18px;
+      color: #ffb3b3;
+      margin-top: 10px;
+    }
+
+    .done {
+      color: #9ecaff;
+      font-size: 30px;
+      font-weight: bold;
+      margin-top: 20px;
+    }
+
+    .overlay {
+      position: absolute;
+      inset: 0;
+      background: rgba(0,0,0,0.78);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      z-index: 5;
+    }
+
+    .overlay.hidden {
+      display: none;
+    }
+
+    .overlay-box {
+      border: 2px solid #ff4d4d;
+      border-radius: 16px;
+      padding: 24px;
+      background: rgba(40, 0, 0, 0.92);
+      max-width: 520px;
+      box-shadow: 0 0 25px rgba(255,0,0,0.3);
+    }
+
+    .overlay-box h2 {
+      margin-top: 0;
+      color: #ff7070;
+      letter-spacing: 2px;
+    }
+
+    .tap-btn {
+      margin-top: 18px;
+      padding: 14px 18px;
+      width: 100%;
+      font-size: 18px;
+      font-family: inherit;
+      border: none;
+      border-radius: 10px;
+      background: #ff2e2e;
+      color: #fff;
+      cursor: pointer;
+    }
+
+    @keyframes flashText {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.35; }
+    }
+
+    @keyframes pulseBorder {
+      0%, 100% { box-shadow: 0 0 15px rgba(255, 0, 0, 0.25); }
+      50% { box-shadow: 0 0 35px rgba(255, 0, 0, 0.6); }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="card">
+    <div id="soundOverlay" class="overlay">
+      <div class="overlay-box">
+        <h2>SON BLOQUÉ PAR LE TÉLÉPHONE</h2>
+        <div class="warning" style="margin-bottom:0;">
+          La pénalité a déjà démarré.<br>
+          Touchez juste une fois pour activer les bips et l’alarme de fin.
+        </div>
+        <button class="tap-btn" id="enableSoundBtn">ACTIVER LE SON</button>
+      </div>
+    </div>
+
+    <h1>⚠ ALERTE ⚠</h1>
+    <div id="content">
+      <div class="warning">
+        Vous avez activé le QR code d’une autre équipe.<br>
+        <strong>Pénalité : 1 minute.</strong><br>
+        Toute action est bloquée jusqu’à la fin du compte à rebours.
+      </div>
+
+      <div id="timer" class="timer">01:00</div>
+      <div id="sub" class="sub">Pénalité en cours...</div>
+    </div>
+  </div>
+
+  <script>
+    let timeLeft = 60;
+    let countdown = null;
+    let audioCtx = null;
+    let soundEnabled = false;
+    let finished = false;
+
+    function getAudioContext() {
+      if (!audioCtx) {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      }
+      return audioCtx;
+    }
+
+    async function enableSound() {
+      try {
+        const ctx = getAudioContext();
+        if (ctx.state === "suspended") {
+          await ctx.resume();
+        }
+        soundEnabled = true;
+        document.getElementById("soundOverlay").classList.add("hidden");
+        beep(1200, 100, 0.12, "square");
+      } catch (e) {
+        soundEnabled = false;
+      }
+    }
+
+    function beep(freq = 1000, duration = 120, volume = 0.12, type = "square") {
+      if (!soundEnabled) return;
+      try {
+        const ctx = getAudioContext();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+
+        osc.type = type;
+        osc.frequency.setValueAtTime(freq, ctx.currentTime);
+
+        gain.gain.setValueAtTime(volume, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + duration / 1000);
+
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+
+        osc.start(ctx.currentTime);
+        osc.stop(ctx.currentTime + duration / 1000);
+      } catch (e) {}
+    }
+
+    function playEndAlarm() {
+      if (!soundEnabled) return;
+      const pattern = [1400, 1000, 1400, 1000, 1600, 1200, 1800, 1400];
+      pattern.forEach((freq, i) => {
+        setTimeout(() => {
+          beep(freq, 220, 0.18, "square");
+        }, i * 250);
+      });
+    }
+
+    function formatTime(seconds) {
+      const min = String(Math.floor(seconds / 60)).padStart(2, "0");
+      const sec = String(seconds % 60).padStart(2, "0");
+      return `${min}:${sec}`;
+    }
+
+    function finishPenalty() {
+      if (finished) return;
+      finished = true;
+
+      document.getElementById("content").innerHTML = `
+        <div class="done">PÉNALITÉ TERMINÉE</div>
+        <div class="warning" style="margin-top:18px;">
+          Vous pouvez reprendre votre mission.
+        </div>
+        <div class="timer">00:00</div>
+      `;
+
+      document.getElementById("soundOverlay").classList.add("hidden");
+      playEndAlarm();
+    }
+
+    function startCountdown() {
+      const timerEl = document.getElementById("timer");
+
+      countdown = setInterval(() => {
+        timeLeft--;
+        timerEl.textContent = formatTime(timeLeft);
+
+        if (timeLeft > 0) {
+          beep(1100, 110, 0.14, "square");
+        }
+
+        if (timeLeft <= 0) {
+          clearInterval(countdown);
+          finishPenalty();
+        }
+      }, 1000);
+    }
+
+    document.getElementById("enableSoundBtn").addEventListener("click", enableSound);
+    document.getElementById("soundOverlay").addEventListener("click", enableSound);
+
+    window.addEventListener("load", () => {
+      startCountdown();
+    });
+  </script>
+
+</body>
+</html>
